@@ -1,0 +1,371 @@
+<!--
+ __          ___ _ _   _____   __  __       _          _   _            ____               ___ ___  
+ \ \        / (_) | | |_   _| |  \/  |     | |        | | | |          |  _ \             |__ \__ \ 
+  \ \  /\  / / _| | |   | |   | \  / | __ _| | _____  | |_| |__   ___  | |_) |_   _ ___ ___  ) | ) |
+   \ \/  \/ / | | | |   | |   | |\/| |/ _` | |/ / _ \ | __| '_ \ / _ \ |  _ <| | | / __/ __|/ / / / 
+    \  /\  /  | | | |  _| |_  | |  | | (_| |   <  __/ | |_| | | |  __/ | |_) | |_| \__ \__ \_| |_|  
+     \/  \/   |_|_|_| |_____| |_|  |_|\__,_|_|\_\___|  \__|_| |_|\___| |____/ \__,_|___/___(_) (_)  
+                                                                                                                                                                                       
+-->                                           
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>TNT A4</title>
+    <!-- Mapbox import -->
+  	<script src='https://api.mapbox.com/mapbox.js/v3.0.1/mapbox.js'></script>
+	<!--load JQuery script-->
+  	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+	<!-- Style import -->
+  	<link href='https://api.mapbox.com/mapbox.js/v3.0.1/mapbox.css' rel='stylesheet' />
+
+  	<link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Raleway">
+    <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Bitter">
+  	
+  	<!-- Styles -->
+  	<style>
+        body { margin:0; padding:0; }
+        #map { 
+            margin-top: 15px;
+            margin-left: 15px;
+            margin-right: 15px;
+            height: 515px;
+            width: 700px;
+            float: left;
+
+             }
+        #header{
+            margin-top: 15px;  
+            height: 120px;
+            background-color: black;
+            width: 100%;
+            font-family:'Raleway', sans-serif;
+            color:white;
+            font-size:40px;
+            text-align:center;
+            padding-top:40px;
+            padding-bottom:40px;
+           
+        }
+        #info{
+
+            background-color: cornflowerblue;
+            margin-top: 15px;
+            margin-left: 725px;
+            margin-right: 15px;
+            height: 500px;
+            width: auto;
+            font-family:'Bitter', serif;
+            padding:15px;
+            line-height:25px;
+
+        }
+        #footer{
+            clear: left;
+            margin-top: 15px;  
+            margin-bottom:15px;
+            height: 50px;
+            background-color: black;
+            width: 100%;
+            padding-top:20px;
+            font-family:'Raleway', sans-serif;
+            color:white;
+            font-size:15px;
+        }
+        #reset{
+
+        font-family:'Bitter', serif;
+        background-color: white;
+        border:0px;
+        }
+
+    </style>
+
+  </head>
+
+  <body>
+  	<!-- Map Div-->
+  	<div id= 'header'> Will I make the bus? <br> <hr> Click on your location to find out! </div>
+
+  	<div id='map'></div> 
+
+  	<div id='info'>
+  	    <p> Welcome to 'Will I make the bus?' - Laval Edition!  
+  	    <br>
+  	    <br>
+  	    This app uses GTFS realtime bus locations in Laval, and lets you know whether you will make it to your nearest bus stop before the bus arrives! Never be stuck running in the cold to make your bus again, with 'Will I make the bus!'.
+  	    <br>
+  	    Start by clicking your location on the map, and then be prompted with bus ETA and your own time to the spot (without running mind you).
+  	    <br>
+  	    <br>
+  	    Have a good trip!
+  	    <br>
+  	    <br>
+  	        <button id = 'reset' onclick="refresh()">Click here to reset the map</button>
+  	    </p>
+  	</div>
+
+	 <div id='footer'> Uses GTFS bus stops and live bus locations using the nextbus API </div>
+
+		<script>	
+
+			function refresh() { //the function for the reload button, that reloads the entire page.
+			    location.reload();
+			}
+
+			//Map Initiation
+			L.mapbox.accessToken = 'pk.eyJ1Ijoibm9lcyIsImEiOiJjajBsdGh0aDQwMDBwMnFwc3A5eTFjYXc5In0.TTPixxA5UWm_yfraxawshg';
+			var map = L.mapbox.map('map', 'mapbox.streets')
+			  .setView([45.605943,-73.709509],11); //Initial coordinates and zoom level
+			 var stopLayer = L.mapbox.featureLayer().addTo(map); //Layer containing bus stop markers
+
+
+
+			// Haversine formula to calculate distance in kms from decimal degrees between 2 points.
+			function dist(lat1, lon1, lat2, lon2) {
+				var p = 0.017453292519943295;    // Math.PI / 180
+			   	var c = Math.cos;
+			   	var a = 0.5 - c((lat2 - lat1) * p)/2 + 
+			        	c(lat1 * p) * c(lat2 * p) * 
+			           	(1 - c((lon2 - lon1) * p))/2;
+
+			   	return 12742 * Math.asin(Math.sqrt(a)); // 2 * R; R = 6371 km (or 6571000 m) <-- earth's radius in km / m.
+			 }
+
+			//Distance to calculate walktime given the distance to the stop
+			function walkTime(dist){
+			 	var time = dist/(0.1); //asumes a walking time of 0.1km/minute
+			 	return time;
+			 }               
+//-----------------------------------------------------------------------------------------------------------
+// 												GTFS Realtime Bus Locations:
+				
+				  var bus=[]; //An array of object "BUS" (has lat and long of each bus)
+			 	  $(document).ready(function(e){
+			 	          $.ajax({
+			 	              url : "http://webservices.nextbus.com/service/publicXMLFeed?command=vehicleLocations&a=stl", //Realtime bus feed
+			 	              method : 'GET',
+			 	              dataType : 'xml',
+			 	              success : function(data){
+			 	                  // This one below finds all the vehicle nodes
+			 	                  // and parse each of them individually.
+			 	                  $(data).find('vehicle').each(function(index, vehicle){
+			 	                      var lat = $(vehicle).attr('lat'); //pulls vehicle lat
+			 	                      var lon = $(vehicle).attr('lon'); //pulls vehicle long
+
+			 	                      bus.push({ //pushes coordinates as attributes of each bus object
+			 	                      	lat: lat,
+			 	                      	lon: lon
+			 	                      });
+			 	                  });
+			 	              }
+			 	          });
+			 	    });
+//-----------------------------------------------------------------------------------------------------------
+// 												GTFS Realtime Bus Predictions:
+
+			 	for(i in stop){
+			 		var urlHead = "http://webservices.nextbus.com/service/publicXMLFeed?command=predictions&a=stl&stopId="; //Request head without the stop ID for bus predictions
+			 		var queryUrl = encodeURI(urlHead+distToStop[0].stop.id); //encodes the closest bus stop id (according to the on-click distance) into the request 
+			 		//console.log(queryUrl);
+			 		
+			 		$(document).ready(function(e){
+			 		        $.ajax({
+			 		            url : queryUrl,
+			 		            method : 'GET',
+			 		            dataType : 'xml',
+			 		            success : function(data){
+			 		                // This one below finds all the vehicle nodes
+			 		                // and parse each of them individually.
+			 		                $(data).find('prediction').each(function(index, prediction){ 
+			 		                    // Get the vehicle lat
+			 		                    var predictions = $(prediction).attr('minutes'); //Gets the prediction in minutes for the stop
+
+			 		                    predictions.push({ //Pushes the stop id and prediction into a predictions object
+			 		                    	stopId: stop[i].id,
+			 		                    	arrivalTime: predictions
+			 		                    });
+			 		                });
+			 		            }
+			 		        });
+			 		    });
+
+			 	}
+//-----------------------------------------------------------------------------------------------------------
+//                                         GTFS Bus Stop Markers  
+
+			var queryHead = "https://www.googleapis.com/fusiontables/v2/query?sql="; //Fusion tables API request
+			var queryTail = "&key=AIzaSyBfiusxHnKEjM_qqD7kPcWi77pzWYy9dKk"; //Fusion tables API key
+			var tableId = "15XN5DHvIUSGGr3GIwWkXShP4DoKeNHLjyF8lC9UM"; //Table id
+			var query = "SELECT stop_code, stop_name, stop_lat, stop_lon FROM " + tableId; //SQL query to only take stop's: id, name, lat, long
+
+			var queryUrl = encodeURI(queryHead + query + queryTail); //final Query url for jQuery request
+			
+			var stop=[]; //Array of bus stop objects that hold the stop's coordinates out of jQuery request
+
+			var distArr=[]; //Holds distance values from user to all stops
+			var distToStop=[]; //Holds an array of stops with distance to stops as an attribute
+			
+			var busToStopDist=[]; //stores distances nearest stop (defined earlier as distToStop[0]) to nearest bus.
+			var busDistToStop=[];// Stores object with bus lat/longs and nearest distance to nearest stop
+			
+			$(document).ready(function(e){
+			    $.ajax({
+			        url : queryUrl,
+			        method : 'GET',
+			        dataType : 'jsonp',
+			        success : function(data){
+			            var rows = data['rows'];
+			            
+			            for(i in rows){
+			        	   	var id = rows[i][0]; //Fusion tables address for ID
+			        	   	var lat = rows[i][2]; //Fusion tables address for lat of stop
+			               	var lon = rows[i][3]; //Fusion tables address for long of stop
+
+			               	stop.push({ //pushes these values into a "stop" object
+			               		id: id,
+			               		lat: lat,
+			               		lon: lon
+			               	});
+			           }
+			    }
+			});
+		}); 
+                                         
+//-----------------------------------------------------------------------------------------------------------
+// 									ON CLICK USER COORDINATES: stores in userLat, userLon										
+			var userLat;
+			var userLon;
+
+			
+			map.on('click',function(e){
+			 	userLat = e.latlng.lat; 
+			 	userLon = e.latlng.lng;
+			 	console.log(userLat + " " + userLon);	
+
+			 	map.flyTo([userLat,userLon],15);	//	 	
+//-------------------------------------------------------------------------------------------------------------
+//                                            User distance to nearest bus
+
+			 	for(i in stop){
+			 		distArr[i]= dist(userLat,userLon,stop[i].lat,stop[i].lon); //distance of every stop to the user's location
+
+			 		distToStop.push({ //pushes stop information and distances to that stop in an object
+			 			stop: stop[i],
+			 			dist: distArr[i] 
+			 		});
+			 	}
+
+
+
+			 	distToStop.sort(function(a,b){ //sorts the distToStop array by distance attribute (i.e. distToStop[0] is the stop closest to the user)
+			 		return a.dist - b.dist; 
+			 	});
+			 	//console.log("Nearest Stop *orange flag*: " + distToStop[0].stop.lat + " " + distToStop[0].stop.lon);
+//---------------------------------------------------------------------------------------------------------------
+
+			 	for(i in bus){ //loops through the bus array
+			 		busToStopDist[i]= dist(distToStop[0].stop.lat,distToStop[0].stop.lon,bus[i].lat,bus[i].lon); //distance of every stop to the user's location
+
+			 		busDistToStop.push({ //stores bus lat longs and distances from the bus to the stop in an object
+			 			busLoc: bus[i],
+			 			dist: busToStopDist[i] 
+			 		});
+			 	}
+
+			 	busDistToStop.sort(function(a,b){ //sorts by shortest bus distance to the nearest user bus stop.
+			 		return a.dist - b.dist; 
+
+			 	});
+			 	console.log("Nearest Bus *green: " + busDistToStop[0].busLoc.lat + " " + busDistToStop[0].busLoc.lon);
+
+
+				//A function to get the scheduled time of the nearest bus to the nearest stop.
+			 	function getBusTime(closestId){
+			 	  	var predictionBase = "http://webservices.nextbus.com/service/publicXMLFeed?command=predictions&a=stl&stopId=";
+			 	  	var predictionQuery = predictionBase.concat(closestId); //concatenates the base url for predictions with the closest stop id.
+			 	  	console.log("Prediction used: " + predictionQuery); //Test print statement
+
+			 	  	//ajax: to get XML data
+			 	  	 $.ajax({
+			 	  		type: "GET",
+			 	  		url: predictionQuery, //the query defined above
+			 	  		dataType: "xml",
+			 	  		success: function(data) {
+			 	  			// Wrap xml in jQuery object
+			 	  			$data = $(data);
+			 	  			var nextBusTime = $data.find('prediction').eq(0).attr("minutes");  //gets predictions for the next vehicle coming to that stop
+			 	  			  
+			 	  			console.log("Next Bus comes in " + nextBusTime + "mins"); // for testing
+			 	  			console.log("walkTime is: " + timeToStop + "mins"); //for testing
+			 	  			
+			 	  			//If the nextBusTime is > than the walking time, prompt the user that they have x minutes to get to the bus, which arrives in y minutes
+			 	  			if(nextBusTime > timeToStop){ 
+			 	  				console.log("user makes it make it");
+			 	  				return confirm("You're gonna make it!The next bus comes in " + nextBusTime + " minute(s). It will take you " + Math.round(timeToStop) + " minutes to get there."); 
+			 	  			}
+
+			 	  			//if the user's walking time is greater than the bus arrival time, promt the user that they have missed the bus.
+			 	  			else{
+			 	  				console.log("user's not going to make it");
+			 	  				return confirm("You missed your bus :(")
+			 	  			}
+			 	  		}
+			 	  	});
+			 	}
+
+			 	//Calls getBusTime function with the closest bus id, to return ETA of the bus in minutes to that stop
+			 	getBusTime(distToStop[0].stop.id);
+			 	var timeToStop = walkTime(distToStop[0].dist);
+
+
+
+			 	//Loads a marker at the user's closest bus stop (orange flat icon)
+			 	var closestStop = 
+			 		L.marker([distToStop[0].stop.lat,distToStop[0].stop.lon],{  //places a marker on the stop closest to the user.
+			 			icon: L.mapbox.marker.icon({ 
+			 				'marker-size': 'small',
+			 			   	'marker-symbol': 'embassy',
+			 			   	'marker-color': '#FF9500' // = nearest
+			 			})
+			 			//fills a popup with relevant info about the bus stop and when the bus is arriving 
+			 		}).bindPopup("<center><b> Bus stop</b> #" + distToStop[0].stop.id + "<br> You have a " + "<b>"+Math.round(timeToStop)+"</b>" + " minute walk ahead of you,<br> don't miss the bus!");
+			 		closestStop.addTo(stopLayer);
+			 		closestStop.openPopup();
+
+			 	//loads a marker at the nearest bus's location (green bus icon)
+			 	var nearestBus = 
+			 		L.marker([busDistToStop[0].busLoc.lat,busDistToStop[0].busLoc.lon],{  //Places a green-ish marker on the nearest bus location
+			 			icon: L.mapbox.marker.icon({ 
+			 				'marker-size': 'small',
+			 		   		'marker-symbol': 'bus',
+			 		   		'marker-color': '#A3E3AA'
+
+			 			})
+			 		//fills a popup with the bus ETA
+			 		}).bindPopup("<center><b>Your bus is on it's way</b></center>");
+			 	nearestBus.addTo(stopLayer); //Adds markers to "stops" feature layer.
+			 	//nearestBus.openPopup();
+
+
+			 	//loads a marker at the user's location (blue star icon)
+			 	var userLocation = 
+			 		L.marker([userLat,userLon],{ 
+			 			icon: L.mapbox.marker.icon({ 
+			 				'marker-size': 'small',
+			 			   	'marker-symbol': 'star',
+			 			   	'marker-color': '#9D9DFF' //User = red
+			 			})
+			 		//fills a popup with the user's location
+			 		}).bindPopup("<center><b>You are Here</b></center>");
+			 		userLocation.addTo(stopLayer); //Adds markers to "stops" feature layer.
+			 
+			});//on click done
+		</script>
+  </body>
+
+</html>
+
+
+
+
